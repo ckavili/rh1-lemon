@@ -7,6 +7,7 @@ metadata:
     opendatahub.io/recommended-accelerators: '["nvidia.com/gpu"]'
     openshift.io/display-name: Guardrails Detector ServingRuntime for KServe
   name: guardrails-detector-runtime-prompt-injection
+  namespace: lemonade-stand
   labels:
     opendatahub.io/dashboard: 'true'
 spec:
@@ -49,6 +50,7 @@ metadata:
     openshift.io/display-name: prompt-injection-detector
     serving.kserve.io/deploymentMode: RawDeployment
   name: prompt-injection-detector
+  namespace: lemonade-stand
   labels:
     opendatahub.io/dashboard: 'true'
 spec:

@@ -2,7 +2,8 @@
 apiVersion: serving.kserve.io/v1alpha1
 kind: ServingRuntime
 metadata:
-  name: guardrails-detector-runtime-language-detector
+  name: guardrails-detector-runtime-hap
+  namespace: lemonade-stand
   annotations:
     helm.sh/weight: "0"
   labels:
@@ -29,9 +30,7 @@ spec:
           value: /mnt/models
         - name: HF_HOME
           value: /tmp/hf_home
-        - name: SAFE_LABELS
-          value: '["en"]'
-      image: quay.io/trustyai/guardrails-detector-huggingface-runtime:latest
+      image: quay.io/trustyai/guardrails-detector-huggingface-runtime:v0.3.0
       name: kserve-container
       ports:
         - containerPort: 8000
@@ -46,9 +45,10 @@ kind: InferenceService
 metadata:
   annotations:
     helm.sh/weight: "1"
-    openshift.io/display-name: language-detector
+    openshift.io/display-name: guardrails-detector-ibm-hap
     serving.kserve.io/deploymentMode: RawDeployment
-  name: language-detector
+  name: guardrails-detector-ibm-hap
+  namespace: lemonade-stand
   labels:
     opendatahub.io/dashboard: 'true'
 spec:
@@ -69,10 +69,10 @@ spec:
           cpu: '1'
           memory: 16Gi
           nvidia.com/gpu: '1'
-      runtime: guardrails-detector-runtime-language-detector
+      runtime: guardrails-detector-runtime-hap
       storage:
         key: minio-data-connection-detector-models
-        path: xlm-roberta-base-language-detection
+        path: granite-guardian-hap-125m
     tolerations:
       - effect: NoSchedule
         key: nvidia.com/gpu

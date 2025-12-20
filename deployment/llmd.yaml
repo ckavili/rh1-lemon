@@ -1,6 +1,3 @@
-# First run these commands
-# oc new-project lemonade-stand
-# oc create secret generic hf-secret --from-literal=HF_TOKEN=<your_huggingface_token> -
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
@@ -8,21 +5,6 @@ metadata:
   name: openshift-ai-inference
 spec:
   controllerName: openshift.io/gateway-controller/v1
----
-# GatewayConfig for resource limits on the gateway pod
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: openshift-ai-inference-config
-  namespace: openshift-ingress
-data:
-  resources: |
-    requests:
-      cpu: "2"
-      memory: "4Gi"
-    limits:
-      cpu: "4"
-      memory: "8Gi"
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -36,23 +18,15 @@ spec:
   listeners:
     - allowedRoutes:
         namespaces:
-          from: Selector
-          selector:
-            matchExpressions:
-              - key: kubernetes.io/metadata.name
-                operator: In
-                values:
-                  - lemonade-stand
-      hostname: inference-gateway.apps.lemon.rhoai.rh-aiservices-bu.com # needs to be updated with the actual ingress domain
-      name: https
-      port: 443
-      protocol: HTTPS
-      tls:
-        certificateRefs:
-          - group: ''
-            kind: Secret
-            name: default-gateway-tls
-        mode: Terminate
+          from: All
+      name: http
+      port: 80
+      protocol: HTTP
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lemonade-stand
 ---
 apiVersion: serving.kserve.io/v1alpha1
 kind: LLMInferenceService
@@ -79,16 +53,16 @@ spec:
           - name: main
             resources:
               limits:
-                cpu: '2'
+                cpu: '8'
                 memory: 24Gi
               requests:
-                cpu: '1'
+                cpu: '6'
                 memory: 16Gi
   template:
     containers:
       - env:
           - name: VLLM_ADDITIONAL_ARGS
-            value: '--model=/mnt/models --served-model-name=llama32 --disable-uvicorn-access-log --max-model-len=512 --gpu-memory-utilization=0.91 --max-num-batched-tokens=32768 --max-num-seqs=512 --num-scheduler-steps=8 --enable-prefix-caching --enable-chunked-prefill'
+            value: '--model=/mnt/models --served-model-name=llama32 --disable-uvicorn-access-log --max-model-len=512 --gpu-memory-utilization=0.90 --max-num-batched-tokens=8192 --max-num-seqs=160 --enable-chunked-prefill'
         livenessProbe:
           failureThreshold: 5
           httpGet:

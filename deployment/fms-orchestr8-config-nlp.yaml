@@ -1,0 +1,51 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: fms-orchestr8-config-nlp
+  namespace: lemonade-stand
+data:
+  config.yaml: |
+    chunkers:
+      sentence:
+        type: sentence
+        service:
+            hostname: chunker-service
+            port: 8085
+    openai: 
+        service:
+          hostname: openshift-ai-inference-openshift-ai-inference.openshift-ingress.svc.cluster.local
+          port: 80
+          path_prefix: /lemonade-stand/llama-llm-d
+    detectors:
+      regex_competitor:
+        type: text_contents
+        service:
+            hostname: "127.0.0.1"
+            port: 8080
+        chunker_id: sentence
+        default_threshold: 0.5
+      hap:
+        type: text_contents
+        service:
+          hostname: guardrails-detector-ibm-hap-predictor
+          port: 80
+        chunker_id: sentence
+        default_threshold: 0.5
+      prompt_injection:
+        type: text_contents
+        service:
+          hostname: prompt-injection-detector-predictor
+          port: 80
+        chunker_id: sentence
+        default_threshold: 0.5
+      language_detection:
+        type: text_contents
+        service:
+          hostname: language-detector-predictor
+          port: 80
+        chunker_id: sentence
+        default_threshold: 0.5
+    tls:
+      external_llm:
+        insecure: true
+        cert_path: /dev/null
