@@ -39,7 +39,7 @@ spec:
     spec:
       containers:
         - name: lemonade-stand
-          image: quay.io/ckavili/lemon-gradio:0.0.6
+          image: quay.io/ckavili/lemon-fastapi:1.0.0
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -65,10 +65,10 @@ spec:
           resources:
             requests:
               memory: "256Mi"
-              cpu: "100m"
+              cpu: "200m"
             limits:
-              memory: "512Mi"
-              cpu: "500m"
+              memory: "1Gi"
+              cpu: "1000m"
           livenessProbe:
             httpGet:
               path: /health

@@ -1,4 +1,5 @@
-gradio>=4.0.0
-httpx>=0.25.0
-uvicorn>=0.24.0
+# FastAPI production server
 fastapi>=0.104.0
+uvicorn[standard]>=0.24.0  # includes uvloop + httptools for better performance
+aiohttp>=3.9.0  # async HTTP client for SSE streaming
+pydantic>=2.0.0

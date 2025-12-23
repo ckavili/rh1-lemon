@@ -1,13 +1,18 @@
 """
-Locust load testing for Lemonade Stand Gradio App
+Locust load testing for Lemonade Stand FastAPI App
 
 Run with: locust -f locustfile.py --host=http://localhost:8080
 
 Or for web UI: locust -f locustfile.py --host=http://localhost:8080 --web-host=0.0.0.0
+
+For headless: locust -f locustfile.py --host=http://localhost:8080 --headless -u 100 -r 10 -t 60s
 """
 
+import json
 import random
-from locust import HttpUser, task, between
+import time
+from locust import HttpUser, task, between, events
+
 
 # Safe prompts about lemons (should pass all guardrails)
 SAFE_PROMPTS = [
@@ -77,71 +82,125 @@ LONG_PROMPTS = [
 
 
 class LemonadeStandUser(HttpUser):
-    """Simulates users interacting with the Lemonade Stand chat app."""
+    """Simulates users interacting with the Lemonade Stand FastAPI chat app."""
 
-    wait_time = between(1, 3)  # Wait 1-3 seconds between tasks
+    wait_time = between(2, 5)  # Wait 2-5 seconds between tasks (realistic user behavior)
 
-    # Disable connection reuse to allow load balancing across replicas
     def on_start(self):
+        """Disable connection reuse to allow load balancing across replicas."""
         self.client.headers["Connection"] = "close"
 
-    def send_chat_message(self, message, expected_block=False):
-        """Send a chat message via Gradio named API endpoint."""
-        task_name = f"chat_{'blocked' if expected_block else 'safe'}"
+    def send_chat_message(self, message: str, name: str = "chat"):
+        """
+        Send a chat message via FastAPI /api/chat endpoint with SSE streaming.
+        Measures time-to-first-byte (TTFB) and total response time.
+        """
+        start_time = time.time()
+        ttfb = None
+        total_content = ""
+        response_type = None
 
-        # stream_chat needs: [message, history_state]
-        with self.client.post(
-            "/gradio_api/call/stream_chat",
-            json={"data": [message, []]},  # message + empty history
-            catch_response=True,
-            name=task_name
-        ) as response:
-            if response.status_code == 200:
-                response.success()
-            else:
-                response.failure(f"Status: {response.status_code}")
+        try:
+            with self.client.post(
+                "/api/chat",
+                json={"message": message},
+                stream=True,
+                catch_response=True,
+                name=name,
+                headers={"Accept": "text/event-stream"}
+            ) as response:
+                if response.status_code != 200:
+                    response.failure(f"Status: {response.status_code}")
+                    return
+
+                # Process SSE stream
+                for line in response.iter_lines():
+                    if ttfb is None:
+                        ttfb = (time.time() - start_time) * 1000  # ms
+
+                    if line:
+                        line_text = line.decode('utf-8') if isinstance(line, bytes) else line
+                        if line_text.startswith("data: "):
+                            try:
+                                data = json.loads(line_text[6:])
+                                if data.get("type") == "chunk":
+                                    total_content += data.get("content", "")
+                                elif data.get("type") == "error":
+                                    response_type = "blocked"
+                                elif data.get("type") == "done":
+                                    response_type = "success"
+                            except json.JSONDecodeError:
+                                pass
+
+                total_time = (time.time() - start_time) * 1000  # ms
+
+                # Log custom metrics
+                if ttfb:
+                    events.request.fire(
+                        request_type="SSE",
+                        name=f"{name}_ttfb",
+                        response_time=ttfb,
+                        response_length=0,
+                        exception=None,
+                        context={}
+                    )
+
+                if total_content or response_type == "blocked":
+                    response.success()
+                else:
+                    response.failure("No content received")
+
+        except Exception as e:
+            events.request.fire(
+                request_type="POST",
+                name=name,
+                response_time=(time.time() - start_time) * 1000,
+                response_length=0,
+                exception=e,
+                context={}
+            )
 
     @task(10)
     def send_safe_prompt(self):
-        """Send a safe prompt about lemons (most common)."""
+        """Send a safe prompt about lemons (most common scenario)."""
         prompt = random.choice(SAFE_PROMPTS)
-        self.send_chat_message(prompt, expected_block=False)
+        self.send_chat_message(prompt, name="chat_safe")
 
     @task(3)
     def send_competitor_fruit_prompt(self):
         """Send a prompt mentioning other fruits (triggers regex_competitor)."""
         prompt = random.choice(COMPETITOR_FRUIT_PROMPTS)
-        self.send_chat_message(prompt, expected_block=True)
+        self.send_chat_message(prompt, name="chat_blocked_fruit")
 
     @task(2)
     def send_prompt_injection(self):
         """Send a prompt injection attempt."""
         prompt = random.choice(PROMPT_INJECTION_PROMPTS)
-        self.send_chat_message(prompt, expected_block=True)
+        self.send_chat_message(prompt, name="chat_blocked_injection")
 
     @task(2)
     def send_non_english_prompt(self):
         """Send a non-English prompt (triggers language_detection)."""
         prompt = random.choice(NON_ENGLISH_PROMPTS)
-        self.send_chat_message(prompt, expected_block=True)
+        self.send_chat_message(prompt, name="chat_blocked_language")
 
     @task(1)
     def send_output_language_trigger(self):
         """Send a prompt that asks for non-English output."""
         prompt = random.choice(OUTPUT_LANGUAGE_TRIGGER_PROMPTS)
-        self.send_chat_message(prompt, expected_block=True)
+        self.send_chat_message(prompt, name="chat_blocked_output_lang")
 
     @task(1)
     def send_hap_prompt(self):
         """Send a potentially harmful prompt."""
         prompt = random.choice(HAP_PROMPTS)
-        self.send_chat_message(prompt, expected_block=True)
+        self.send_chat_message(prompt, name="chat_blocked_hap")
 
     @task(1)
     def send_long_prompt(self):
         """Send a prompt that exceeds the character limit."""
         prompt = random.choice(LONG_PROMPTS)
-        self.send_chat_message(prompt, expected_block=True)
+        self.send_chat_message(prompt, name="chat_blocked_long")
 
     @task(2)
     def check_health(self):
@@ -155,19 +214,95 @@ class LemonadeStandUser(HttpUser):
 
 
 class HighVolumeUser(HttpUser):
-    """Simulates high-volume users sending rapid requests."""
+    """Simulates high-volume users sending rapid requests for stress testing."""
 
-    wait_time = between(0.1, 0.5)  # Very short wait times
+    wait_time = between(0.5, 1)  # Short wait times for stress testing
 
     def on_start(self):
         self.client.headers["Connection"] = "close"
+
+    def send_quick_chat(self, message: str):
+        """Send a chat message without full SSE processing for rapid testing."""
+        try:
+            with self.client.post(
+                "/api/chat",
+                json={"message": message},
+                stream=True,
+                catch_response=True,
+                name="rapid_chat",
+                headers={"Accept": "text/event-stream"}
+            ) as response:
+                # Just consume the first chunk to measure initial response
+                first_chunk = False
+                for line in response.iter_lines():
+                    if line:
+                        first_chunk = True
+                        break
+
+                if response.status_code == 200 and first_chunk:
+                    response.success()
+                else:
+                    response.failure(f"Status: {response.status_code}")
+        except Exception as e:
+            pass  # Ignore errors in rapid testing
 
     @task
     def rapid_safe_prompts(self):
         """Send rapid safe prompts."""
         prompt = random.choice(SAFE_PROMPTS)
-        self.client.post(
-            "/gradio_api/call/stream_chat",
-            json={"data": [prompt, []]},  # message + empty history
-            name="rapid_chat"
-        )
+        self.send_quick_chat(prompt)
+
+
+class MixedLoadUser(HttpUser):
+    """Realistic mixed load simulating various user behaviors."""
+
+    wait_time = between(3, 8)  # Realistic thinking time between messages
+
+    def on_start(self):
+        self.client.headers["Connection"] = "close"
+
+    def send_chat_message(self, message: str, name: str = "chat"):
+        """Send a chat message and wait for full response."""
+        try:
+            with self.client.post(
+                "/api/chat",
+                json={"message": message},
+                stream=True,
+                catch_response=True,
+                name=name,
+                headers={"Accept": "text/event-stream"}
+            ) as response:
+                if response.status_code != 200:
+                    response.failure(f"Status: {response.status_code}")
+                    return
+
+                content_received = False
+                for line in response.iter_lines():
+                    if line:
+                        line_text = line.decode('utf-8') if isinstance(line, bytes) else line
+                        if line_text.startswith("data: "):
+                            content_received = True
+
+                if content_received:
+                    response.success()
+                else:
+                    response.failure("No SSE data received")
+        except Exception as e:
+            pass
+
+    @task(8)
+    def normal_conversation(self):
+        """Simulate a normal user asking about lemons."""
+        prompt = random.choice(SAFE_PROMPTS)
+        self.send_chat_message(prompt, name="mixed_safe")
+
+    @task(1)
+    def curious_user_other_fruit(self):
+        """User tries to ask about other fruits."""
+        prompt = random.choice(COMPETITOR_FRUIT_PROMPTS)
+        self.send_chat_message(prompt, name="mixed_blocked")
+
+    @task(1)
+    def check_app_health(self):
+        """Occasional health check."""
+        self.client.get("/health", name="health")

@@ -1,14 +1,12 @@
 FROM python:3.11-slim
 
 LABEL maintainer="ckavili@redhat.com"
-LABEL description="Gradio chat application for lemonade stand demo"
-LABEL version="1.0"
+LABEL description="FastAPI chat application for lemonade stand demo"
+LABEL version="2.0"
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV GRADIO_SERVER_NAME=0.0.0.0
-ENV GRADIO_SERVER_PORT=8080
 
 # Create non-root user for OpenShift compatibility
 RUN useradd -m -u 1001 appuser
@@ -21,7 +19,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY app.py .
+COPY app_fastapi.py .
+COPY static/ ./static/
 
 # Create cache directory with proper permissions
 RUN mkdir -p /application/.cache && \
@@ -34,9 +33,9 @@ USER 1001
 # Expose port
 EXPOSE 8080
 
-# Health check
+# Health check using curl (lighter than python import)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8080/health')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
 
-# Run the application
-CMD ["python", "app.py"]
+# Run with uvicorn - single worker for async, high concurrency
+CMD ["python", "-m", "uvicorn", "app_fastapi:app", "--host", "0.0.0.0", "--port", "8080"]
