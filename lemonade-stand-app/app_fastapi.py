@@ -65,7 +65,7 @@ MAX_INPUT_CHARS = 100
 
 FRUIT_REGEX_PATTERNS = [
     # English fruits
-    r"\b(?i:oranges?|apples?|cranberr(?:y|ies)|pineapples?|grapes?|strawberr(?:y|ies)|blueberr(?:y|ies)|watermelons?|durians?|cloudberr(?:y|ies)|bananas?|mangoes?|peaches?|pears?|plums?|cherr(?:y|ies)|kiwifruits?|kiwis?|papayas?|avocados?|coconuts?|raspberr(?:y|ies)|blackberr(?:y|ies)|pomegranates?|figs?|dates?|apricots?|nectarines?|tangerines?|clementines?|grapefruits?|limes?|passionfruits?|dragonfruits?|lychees?|guavas?|persimmons?)\b",
+    r"\b(?i:oranges?|apples?|cranberr(?:y|ies)|pineapples?|grapes?|strawberr(?:y|ies)|blueberr(?:y|ies)|watermelons?|durians?|cloudberr(?:y|ies)|bananas?|mangoes?|peaches?|pears?|plums?|cherr(?:y|ies)|kiwifruits?|kiwis?|papayas?|avocados?|coconuts?|raspberr(?:y|ies)|blackberr(?:y|ies)|pomegranates?|figs?|apricots?|nectarines?|tangerines?|clementines?|grapefruits?|lime(?!s)|passionfruits?|dragonfruits?|lychees?|guavas?|persimmons?)\b",
     # Turkish fruits
     r"\b(?i:portakals?|elmalar?|kızılcık(?:lar)?|ananaslar?|üzümler?|çilek(?:ler)?|yaban mersin(?:leri)?|karpuzlar?|durianlar?|bulutot(?:u|ları)?|muzlar?|mango(?:lar)?|şeftaliler?|armutlar?|erikler?|kiraz(?:lar)?|kiviler?|papayalar?|avokadolar?|hindistan cevizi(?:ler)?|ahududular?|böğürtlen(?:ler)?|nar(?:lar)?|incir(?:ler)?|hurmalar?|kayısı(?:lar)?|nektarin(?:ler)?|mandalina(?:lar)?|klementin(?:ler)?|greyfurt(?:lar)?|lime(?:lar)?|passionfruit(?:lar)?|ejder meyvesi(?:ler)?|liçi(?:ler)?|hurma(?:lar)?)\b",
     # Swedish fruits
@@ -98,9 +98,7 @@ FRUIT_REGEX_PATTERNS = [
 
 PROMPT_INJECTION_PATTERNS = [
     r"(?i)\b(ignore|disregard|override|bypass|forget)\b.*\b(previous|above|earlier|system|developer|guardrail|rules?|instructions?)\b",
-    r"(?i)\b(ignorera|bortse|åsidosätt|kringgå|glöm)\b.*\b(tidigare|ovan|föregående|system|utvecklare|skyddsräcke|regler?|instruktioner?)\b",
     r"(?i)\b(this is (the )?only rule|the only rule|new rules?|replace (all )?rules?)\b",
-    r"(?i)\b(det här är (den )?enda regeln|den enda regeln|nya regler?|ersätt (alla )?regler?)\b",
     r"(?i)\b(from now on|starting now|effective immediately)\b",
     r"(?i)\b(act as|pretend to be|role-?play as|jailbreak|devmode)\b",
     r"(?i)\b(do not|don't)\s+(say|write|mention|use)\b",
@@ -309,6 +307,9 @@ class ChatRequest(BaseModel):
 async def process_chat(message: str) -> AsyncGenerator[dict, None]:
     """Process chat message and yield SSE events using aiohttp."""
 
+    print(f"[DEBUG] ===== New chat request =====")
+    print(f"[DEBUG] User message: {repr(message)}")
+
     # Check message length
     if len(message) > MAX_INPUT_CHARS:
         yield {
@@ -322,13 +323,22 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
 
     # LOCAL REGEX CHECK: Pre-filter before sending to orchestrator
     # This reduces load on the orchestrator by catching obvious violations locally
+    print(f"[DEBUG] Checking local regex patterns...")
     if check_regex_locally(message):
+        # Find which pattern matched for logging
+        for i, pattern in enumerate(COMPILED_REGEX_PATTERNS):
+            match = pattern.search(message)
+            if match:
+                print(f"[DEBUG] Local regex BLOCKED - pattern #{i} matched: {repr(match.group())}")
+                print(f"[DEBUG] Pattern: {ALL_REGEX_PATTERNS[i][:100]}...")
+                break
         await metrics.increment_local_regex_block()
         yield {
             "type": "error",
             "message": DETECTOR_MESSAGES["regex_competitor"] + " Is there anything else I can help you with?"
         }
         return
+    print(f"[DEBUG] Local regex check passed")
 
     # Build request payload - regex already checked locally, so only send to orchestrator
     # for HAP, prompt injection, and language detection
@@ -373,11 +383,18 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
         try:
             chunk_data = json.loads(line[6:])
         except json.JSONDecodeError:
+            print(f"[DEBUG] Failed to parse SSE line: {line[:200]}")
             return None, False, None
 
         warnings_list = chunk_data.get("warnings", [])
         detections = chunk_data.get("detections", {})
         choices = chunk_data.get("choices", [])
+
+        # Log raw chunk data for debugging
+        if detections:
+            print(f"[DEBUG] Detections in chunk: {json.dumps(detections, indent=2)}")
+        if warnings_list:
+            print(f"[DEBUG] Warnings in chunk: {json.dumps(warnings_list, indent=2)}")
 
         # Process detections for metrics
         for det in detections.get("input", []):
@@ -414,6 +431,8 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
         if detected_types:
             reasons = [DETECTOR_MESSAGES.get(dt, f"Detection: {dt}") for dt in detected_types]
             block_msg = " ".join(reasons) + " Is there anything else I can help you with?"
+            print(f"[DEBUG] Blocking response - detected types: {detected_types}")
+            print(f"[DEBUG] Block message: {block_msg}")
             return None, True, block_msg
 
         # Extract content
@@ -421,6 +440,7 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
             delta = choices[0].get("delta", {})
             content = delta.get("content", "")
             if content:
+                print(f"[DEBUG] Chunk content: {repr(content)}")
                 return content, False, None
 
         return None, False, None
@@ -430,7 +450,9 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
 
     for attempt in range(max_retries + 1):
         try:
+            print(f"[DEBUG] Sending request to orchestrator (attempt {attempt + 1}/{max_retries + 1})")
             async with aiohttp_session.post(API_URL, json=payload, headers=headers) as response:
+                print(f"[DEBUG] Orchestrator response status: {response.status}")
                 if response.status != 200:
                     error_text = await response.text()
                     print(f"[ERROR] API returned {response.status}: {error_text[:500]}")
@@ -472,6 +494,8 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
                             yield {"type": "chunk", "content": "\n"}
 
                 if full_response:
+                    print(f"[DEBUG] Stream completed successfully")
+                    print(f"[DEBUG] Full response length: {len(full_response)} chars")
                     yield {"type": "done"}
                     return
 

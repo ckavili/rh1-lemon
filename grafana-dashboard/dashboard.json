@@ -31,16 +31,71 @@
           "color": {
             "mode": "palette-classic"
           },
-          "custom": {
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            }
-          },
-          "mappings": []
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hap"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Swearing"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "language_detection"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Non-English"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "prompt_injection"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Hax0r"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "regex_competitor"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "RegEx"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -50,16 +105,18 @@
       },
       "id": 4,
       "options": {
-        "displayLabels": [
-          "name",
-          "percent"
-        ],
+        "displayMode": "gradient",
         "legend": {
+          "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": false
         },
-        "pieType": "pie",
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "left",
+        "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -67,12 +124,9 @@
           "fields": "",
           "values": false
         },
-        "sort": "desc",
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
       },
       "pluginVersion": "12.3.0",
       "targets": [
@@ -85,7 +139,7 @@
         }
       ],
       "title": "Detections by Detector (Stacked)",
-      "type": "piechart"
+      "type": "bargauge"
     },
     {
       "datasource": {
@@ -102,17 +156,38 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#c653ff",
                 "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "sum(guardrail_requests_total)"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total Requests"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "sum(guardrail_detections_total)"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total Detections"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -120,12 +195,12 @@
         "x": 12,
         "y": 0
       },
-      "id": 5,
+      "id": 1,
       "options": {
         "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "vertical",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
@@ -135,20 +210,38 @@
           "values": false
         },
         "showPercentChange": false,
+        "text": {},
         "textMode": "auto",
         "wideLayout": true
       },
       "pluginVersion": "12.3.0",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "7c53ed74-cc4f-4c5e-92d9-b7db51929506"
+          },
           "editorMode": "code",
-          "expr": "sum(guardrail_detections_by_direction{direction=\"input\"})",
+          "expr": "sum(guardrail_requests_total)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "6761ae86-74e4-4b6b-812c-ca540a73df1d"
+          },
+          "editorMode": "code",
+          "expr": "sum(guardrail_detections_total)",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Input Detections Total",
+      "title": "",
       "type": "stat"
     },
     {
@@ -156,11 +249,13 @@
         "type": "prometheus",
         "uid": "6761ae86-74e4-4b6b-812c-ca540a73df1d"
       },
+      "description": "",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
+          "displayName": "Total Input Detections",
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -168,10 +263,6 @@
               {
                 "color": "green",
                 "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
           }
@@ -184,11 +275,11 @@
         "x": 0,
         "y": 8
       },
-      "id": 1,
+      "id": 5,
       "options": {
         "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
+        "graphMode": "none",
+        "justifyMode": "center",
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
@@ -199,24 +290,20 @@
           "values": false
         },
         "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "textMode": "value_and_name",
+        "wideLayout": false
       },
       "pluginVersion": "12.3.0",
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "7c53ed74-cc4f-4c5e-92d9-b7db51929506"
-          },
           "editorMode": "code",
-          "expr": "sum(guardrail_detections_total)",
+          "expr": "sum(guardrail_detections_by_direction{direction=\"input\"})",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Total Detections",
+      "title": "",
       "type": "stat"
     },
     {
@@ -229,6 +316,7 @@
           "color": {
             "mode": "thresholds"
           },
+          "displayName": "Total Output Detections",
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -236,10 +324,6 @@
               {
                 "color": "green",
                 "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
           }
@@ -255,8 +339,8 @@
       "id": 6,
       "options": {
         "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
+        "graphMode": "none",
+        "justifyMode": "center",
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
@@ -267,8 +351,8 @@
           "values": false
         },
         "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "textMode": "value_and_name",
+        "wideLayout": false
       },
       "pluginVersion": "12.3.0",
       "targets": [
@@ -280,7 +364,7 @@
           "refId": "A"
         }
       ],
-      "title": "Output Detections Total",
+      "title": "",
       "type": "stat"
     }
   ],
@@ -292,12 +376,12 @@
     "list": []
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Prometheus Queries for Guardrail Metrics Dashboard",
   "uid": "34d7e0c2-afeb-4939-bbf9-c9b0ad33595c",
-  "version": 2
+  "version": 19
 }
