@@ -124,7 +124,7 @@
           "fields": "",
           "values": false
         },
-        "showUnfilled": true,
+        "showUnfilled": false,
         "sizing": "auto",
         "valueMode": "color"
       },
@@ -138,7 +138,7 @@
           "refId": "A"
         }
       ],
-      "title": "Detections by Detector (Stacked)",
+      "title": "",
       "type": "bargauge"
     },
     {
@@ -255,7 +255,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "displayName": "Total Input Detections",
+          "displayName": "Input Detections Total",
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -316,7 +316,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "displayName": "Total Output Detections",
+          "displayName": "Output Detections Total",
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -376,12 +376,12 @@
     "list": []
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Prometheus Queries for Guardrail Metrics Dashboard",
   "uid": "34d7e0c2-afeb-4939-bbf9-c9b0ad33595c",
-  "version": 19
+  "version": 21
 }
