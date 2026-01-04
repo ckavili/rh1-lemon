@@ -206,6 +206,43 @@ const SAFE_PROMPTS = [
     "Organic vs regular lemons?",
     "How to pick ripe lemons?",
     "Lemon curd recipe please",
+    // Additional safe prompts
+    "What nutrients are in lemon peel?",
+    "How to make lemon sorbet?",
+    "Best way to juice a lemon?",
+    "Lemon tree care in winter?",
+    "What pests affect lemon trees?",
+    "How to make preserved lemons?",
+    "Can lemon remove stains?",
+    "How to make lemon butter sauce?",
+    "What climate do lemons grow in?",
+    "How old before lemon trees fruit?",
+    "Lemon meringue pie tips?",
+    "How to dry lemon slices?",
+    "What is citric acid in lemons?",
+    "Lemon chicken recipe ideas?",
+    "How to make lemon extract?",
+    "Best fertilizer for lemon trees?",
+    "Lemon in tea benefits?",
+    "How to candy lemon peel?",
+    "What makes lemons yellow?",
+    "Lemon vinaigrette recipe?",
+    "How to grow lemons indoors?",
+    "Lemon for sore throat?",
+    "What is lemon curd used for?",
+    "How to make lemon bars?",
+    "Lemon tree pruning tips?",
+    "When are lemons in season?",
+    "Lemon marmalade recipe?",
+    "How to make lemon pepper?",
+    "Lemon for skin care?",
+    "What dishes pair with lemon?",
+    "How to store lemon zest?",
+    "Lemon detox water recipe?",
+    "Why add lemon to fish?",
+    "Lemon tree indoor lighting?",
+    "How to make limoncello?",
+    "Lemon in baking substitutes?",
 ];
 
 // Prompts with fruits that should trigger regex (multi-language)
@@ -331,6 +368,17 @@ const OUTPUT_TRIGGER_PROMPTS = [
 ];
 
 function getRandomPrompt() {
+    // Check if SAFE_ONLY mode is enabled via environment variable
+    const safeOnly = __ENV.SAFE_ONLY === 'true';
+
+    if (safeOnly) {
+        // Only return safe prompts
+        return {
+            prompt: SAFE_PROMPTS[Math.floor(Math.random() * SAFE_PROMPTS.length)],
+            type: 'safe',
+        };
+    }
+
     const rand = Math.random();
 
     // 40% safe prompts (to test LLM response)
