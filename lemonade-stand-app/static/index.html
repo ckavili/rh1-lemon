@@ -200,6 +200,30 @@
             border: 1px solid #991b1b;
         }
 
+        .message.error-hap {
+            background: rgb(255, 115, 131);
+            color: #333;
+            border: 1px solid rgb(220, 90, 105);
+        }
+
+        .message.error-language {
+            background: rgb(138, 184, 255);
+            color: #333;
+            border: 1px solid rgb(100, 150, 220);
+        }
+
+        .message.error-prompt-injection {
+            background: rgb(202, 149, 229);
+            color: #333;
+            border: 1px solid rgb(170, 120, 200);
+        }
+
+        .message.error-regex {
+            background: rgb(255, 238, 82);
+            color: #333;
+            border: 1px solid rgb(220, 200, 60);
+        }
+
         .message.typing::after {
             content: '';
             display: inline-block;
@@ -476,7 +500,7 @@
 </head>
 <body>
     <div class="container">
-        <div class="header">Welcome to digital lemonade stand! 🍋</div>
+        <div class="header">Welcome to the Red Hat digital lemonade stand AI Assistant! 🍋</div>
 
         <div class="chatbot-label">
             <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
@@ -694,7 +718,8 @@
                                 } else if (data.type === 'error') {
                                     pendingContent = '';
                                     assistantDiv.textContent = data.message;
-                                    assistantDiv.className = 'message error';
+                                    const errorClass = data.detector_type ? 'error-' + data.detector_type : 'error';
+                                    assistantDiv.className = 'message ' + errorClass;
                                     streamDone = true;
                                 } else if (data.type === 'done') {
                                     streamDone = true;
@@ -720,7 +745,8 @@
                     await new Promise(r => setTimeout(r, 50));
                 }
 
-                if (!displayedContent && !assistantDiv.classList.contains('error') && !stopRequested) {
+                const hasError = Array.from(assistantDiv.classList).some(c => c.startsWith('error'));
+                if (!displayedContent && !hasError && !stopRequested) {
                     assistantDiv.textContent = 'No response received.';
                     assistantDiv.className = 'message error';
                 }

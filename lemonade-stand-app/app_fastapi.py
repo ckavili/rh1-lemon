@@ -65,7 +65,7 @@ MAX_INPUT_CHARS = 100
 
 FRUIT_REGEX_PATTERNS = [
     # English fruits
-    r"\b(?i:oranges?|apples?|cranberr(?:y|ies)|pineapples?|grapes?|strawberr(?:y|ies)|blueberr(?:y|ies)|watermelons?|durians?|cloudberr(?:y|ies)|bananas?|mangoes?|peaches?|pears?|plums?|cherr(?:y|ies)|kiwifruits?|kiwis?|papayas?|avocados?|coconuts?|raspberr(?:y|ies)|blackberr(?:y|ies)|pomegranates?|figs?|apricots?|nectarines?|tangerines?|clementines?|grapefruits?|lime(?!s)|passionfruits?|dragonfruits?|lychees?|guavas?|persimmons?)\b",
+    r"\b(?i:oranges?|apples?|cranberr(?:y|ies)|pineapples?|grapes?|strawberr(?:y|ies)|blueberr(?:y|ies)|watermelons?|durians?|cloudberr(?:y|ies)|bananas?|mangoes?|peaches?|pears?|plums?|cherr(?:y|ies)|kiwifruits?|kiwis?|papayas?|avocados?|coconuts?|raspberr(?:y|ies)|blackberr(?:y|ies)|pomegranates?|figs?|dates?|apricots?|nectarines?|tangerines?|clementines?|grapefruits?|lime(?!s)|passionfruits?|dragonfruits?|lychees?|guavas?|persimmons?)\b",
     # Turkish fruits
     r"\b(?i:portakals?|elmalar?|kızılcık(?:lar)?|ananaslar?|üzümler?|çilek(?:ler)?|yaban mersin(?:leri)?|karpuzlar?|durianlar?|bulutot(?:u|ları)?|muzlar?|mango(?:lar)?|şeftaliler?|armutlar?|erikler?|kiraz(?:lar)?|kiviler?|papayalar?|avokadolar?|hindistan cevizi(?:ler)?|ahududular?|böğürtlen(?:ler)?|nar(?:lar)?|incir(?:ler)?|hurmalar?|kayısı(?:lar)?|nektarin(?:ler)?|mandalina(?:lar)?|klementin(?:ler)?|greyfurt(?:lar)?|lime(?:lar)?|passionfruit(?:lar)?|ejder meyvesi(?:ler)?|liçi(?:ler)?|hurma(?:lar)?)\b",
     # Swedish fruits
@@ -130,11 +130,11 @@ def check_regex_locally(text: str) -> bool:
 
 # User-friendly messages for each detector type
 DETECTOR_MESSAGES = {
-    "hap": "Your message was flagged for containing potentially harmful or inappropriate content.",
-    "prompt_injection": "Your message appears to contain instructions that try to override the system rules.",
-    "regex_competitor": "I can only discuss lemons! Other fruits and off-topic subjects are not allowed.",
-    "language_detection_input": "I can only communicate in English. Please rephrase your message in English.",
-    "language_detection_output": "I can only answer in English.",
+    "hap": "🤬 Your message was flagged for containing potentially harmful or inappropriate content.",
+    "prompt_injection": "👮Your message appears to contain instructions that try to override the system rules.",
+    "regex_competitor": "🍏 I can only discuss lemons! Other fruits and off-topic subjects are not allowed.",
+    "language_detection_input": "🇬🇧 I can only communicate in English. Please rephrase your message in English.",
+    "language_detection_output": "I can only answer in English. 🇬🇧",
 }
 
 # =============================================================================
@@ -335,7 +335,8 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
         await metrics.increment_local_regex_block()
         yield {
             "type": "error",
-            "message": DETECTOR_MESSAGES["regex_competitor"] + " Is there anything else I can help you with?"
+            "message": DETECTOR_MESSAGES["regex_competitor"] + " Is there anything else I can help you with?",
+            "detector_type": "regex"
         }
         return
     print(f"[DEBUG] Local regex check passed")
@@ -371,20 +372,20 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
     if VLLM_API_KEY:
         headers["Authorization"] = f"Bearer {VLLM_API_KEY}"
 
-    async def parse_sse_line(line: str) -> tuple[str | None, bool, str | None]:
+    async def parse_sse_line(line: str) -> tuple[str | None, bool, str | None, str | None]:
         """
-        Parse an SSE line and return (content, should_block, block_message).
-        Returns (None, False, None) for non-content lines.
+        Parse an SSE line and return (content, should_block, block_message, detector_type).
+        Returns (None, False, None, None) for non-content lines.
         """
         line = line.strip()
         if not line or line == "data: [DONE]" or not line.startswith("data: "):
-            return None, False, None
+            return None, False, None, None
 
         try:
             chunk_data = json.loads(line[6:])
         except json.JSONDecodeError:
             print(f"[DEBUG] Failed to parse SSE line: {line[:200]}")
-            return None, False, None
+            return None, False, None, None
 
         warnings_list = chunk_data.get("warnings", [])
         detections = chunk_data.get("detections", {})
@@ -433,7 +434,17 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
             block_msg = " ".join(reasons) + " Is there anything else I can help you with?"
             print(f"[DEBUG] Blocking response - detected types: {detected_types}")
             print(f"[DEBUG] Block message: {block_msg}")
-            return None, True, block_msg
+            # Determine primary detector type for styling
+            primary_type = detected_types[0]
+            if primary_type.startswith("language_detection"):
+                detector_class = "language"
+            elif primary_type == "prompt_injection":
+                detector_class = "prompt-injection"
+            elif primary_type == "regex_competitor":
+                detector_class = "regex"
+            else:
+                detector_class = primary_type  # "hap"
+            return None, True, block_msg, detector_class
 
         # Extract content
         if choices:
@@ -441,9 +452,9 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
             content = delta.get("content", "")
             if content:
                 print(f"[DEBUG] Chunk content: {repr(content)}")
-                return content, False, None
+                return content, False, None, None
 
-        return None, False, None
+        return None, False, None, None
 
     max_retries = 2
     base_delay = 0.1  # 100ms initial delay, doubles each retry
@@ -480,10 +491,10 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
                     # Process complete lines
                     while "\n" in buffer:
                         line, buffer = buffer.split("\n", 1)
-                        content, should_block, block_msg = await parse_sse_line(line)
+                        content, should_block, block_msg, detector_type = await parse_sse_line(line)
 
                         if should_block:
-                            yield {"type": "error", "message": block_msg}
+                            yield {"type": "error", "message": block_msg, "detector_type": detector_type}
                             return
 
                         if content:
@@ -590,6 +601,10 @@ async def root():
         .user { background: #EE0000; color: white; margin-left: auto; }
         .assistant { background: white; border: 1px solid #ddd; }
         .error { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+        .error-hap { background: rgb(255, 115, 131); color: #333; border: 1px solid rgb(220, 90, 105); }
+        .error-language { background: rgb(138, 184, 255); color: #333; border: 1px solid rgb(100, 150, 220); }
+        .error-prompt-injection { background: rgb(202, 149, 229); color: #333; border: 1px solid rgb(170, 120, 200); }
+        .error-regex { background: rgb(255, 238, 82); color: #333; border: 1px solid rgb(220, 200, 60); }
         .input-container { padding: 20px; background: white; border-top: 1px solid #ddd; }
         .input-wrapper { max-width: 800px; margin: 0 auto; display: flex; gap: 10px; }
         input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; }
@@ -677,7 +692,8 @@ async def root():
                                     chat.scrollTop = chat.scrollHeight;
                                 } else if (data.type === 'error') {
                                     assistantDiv.textContent = data.message;
-                                    assistantDiv.className = 'message error';
+                                    const errorClass = data.detector_type ? 'error-' + data.detector_type : 'error';
+                                    assistantDiv.className = 'message ' + errorClass;
                                 }
                             } catch (e) {}
                         }
