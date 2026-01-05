@@ -27,7 +27,7 @@ metadata:
     app.kubernetes.io/name: lemonade-stand
     app.kubernetes.io/component: frontend
 spec:
-  replicas: 20
+  replicas: 1
   selector:
     matchLabels:
       app: lemonade-stand

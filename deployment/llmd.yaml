@@ -23,11 +23,6 @@ spec:
       port: 80
       protocol: HTTP
 ---
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: lemonade-stand
----
 apiVersion: serving.kserve.io/v1alpha1
 kind: LLMInferenceService
 metadata:
@@ -43,7 +38,7 @@ spec:
   model:
     name: llama32
     uri: oci://quay.io/redhat-ai-services/modelcar-catalog:llama-3.2-3b-instruct
-  replicas: 51 # change replicas as needed
+  replicas: 1 # change replicas as needed
   router:
     gateway: {}
     route: {}
@@ -82,6 +77,7 @@ spec:
                 - type: single-profile-handler
                 - type: queue-scorer
                 - type: kv-cache-utilization-scorer
+                - type: active-request-scorer
                 schedulingProfiles:
                 - name: default
                   plugins:
@@ -89,6 +85,8 @@ spec:
                     weight: 3
                   - pluginRef: kv-cache-utilization-scorer
                     weight: 2
+                  - pluginRef: active-request-scorer
+                    weight: 1
   template:
     containers:
       - env:

@@ -3,13 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="theme-color" content="#0b0f19">
+    <meta name="theme-color" content="#171A1C">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Lemonade Stand Chat</title>
     <!-- Markdown parser -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
+        :root {
+            /* Neutrals (Grafana-aligned) */
+            --bg: #171A1C;
+            --panel: #1F242B;
+            --bubble-bot: #2B3440;
+            --bubble-user: #242B33;
+            --text: #E6E8EB;
+            --text-muted: #A7B0BA;
+            --border: #323A44;
+
+            /* Brand */
+            --redhat-red: #EE0000;
+
+            /* Semantic colors (Grafana dashboard aligned) */
+            --nonlemon: #FCE957;
+            --nonenglish: #8CA3EF;
+            --jailbreak: #C48AE6;
+            --swearing: #F86877;
+            --blocked: #D6182D;
+            --approved: #23782D;
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
@@ -18,12 +40,12 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0b0f19;
+            background: var(--bg);
             min-height: 100vh;
             min-height: -webkit-fill-available; /* iOS Safari fix */
             display: flex;
             flex-direction: column;
-            color: #fff;
+            color: var(--text);
             /* Safe area for notched phones */
             padding-left: env(safe-area-inset-left);
             padding-right: env(safe-area-inset-right);
@@ -44,7 +66,7 @@
         }
 
         .header {
-            background: #EE0000;
+            background: var(--redhat-red);
             color: white;
             padding: 18px 40px;
             text-align: center;
@@ -58,11 +80,11 @@
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            background: #1f2937;
+            background: var(--panel);
             padding: 8px 16px;
             border-radius: 8px 8px 0 0;
             font-size: 14px;
-            color: #9ca3af;
+            color: var(--text-muted);
             margin-bottom: -1px;
         }
 
@@ -74,13 +96,13 @@
 
         .chat-container {
             flex: 1;
-            background: #1f2937;
+            background: var(--panel);
             border-radius: 0 12px 12px 12px;
             display: flex;
             flex-direction: column;
             min-height: 500px;
             max-height: 70vh;
-            border: 1px solid #374151;
+            border: 1px solid var(--border);
         }
 
         .messages {
@@ -108,9 +130,9 @@
         }
 
         .example-btn {
-            background: #374151;
-            border: 1px solid #4b5563;
-            color: #e5e7eb;
+            background: var(--bubble-bot);
+            border: 1px solid var(--border);
+            color: var(--text);
             padding: 20px 24px;
             border-radius: 12px;
             cursor: pointer;
@@ -123,14 +145,14 @@
         }
 
         .example-btn:hover {
-            background: #4b5563;
-            border-color: #6b7280;
+            background: var(--bubble-user);
+            border-color: var(--text-muted);
         }
 
         .message {
             margin: 8px 0;
             padding: 12px 16px;
-            border-radius: 12px;
+            border-radius: 14px;
             max-width: 80%;
             line-height: 1.6;
             animation: fadeIn 0.3s ease;
@@ -142,22 +164,23 @@
         }
 
         .message.user {
-            background: #EE0000;
-            color: white;
+            background: var(--bubble-user);
+            color: var(--text);
             margin-left: auto;
             border-bottom-right-radius: 4px;
+            border-left: 4px solid var(--blocked);
         }
 
         .message.assistant {
-            background: #374151;
-            color: #e5e7eb;
+            background: var(--bubble-bot);
+            color: var(--text);
             border-bottom-left-radius: 4px;
         }
 
         /* Markdown styles */
         .message.assistant h1, .message.assistant h2, .message.assistant h3 {
             margin: 0.5em 0 0.3em 0;
-            color: #fff;
+            color: var(--text);
         }
         .message.assistant h1 { font-size: 1.3em; }
         .message.assistant h2 { font-size: 1.15em; }
@@ -169,14 +192,14 @@
         }
         .message.assistant li { margin: 0.2em 0; }
         .message.assistant code {
-            background: #1f2937;
+            background: var(--bg);
             padding: 0.15em 0.4em;
             border-radius: 4px;
             font-family: 'SF Mono', Monaco, monospace;
             font-size: 0.9em;
         }
         .message.assistant pre {
-            background: #111827;
+            background: var(--bg);
             padding: 12px;
             border-radius: 8px;
             overflow-x: auto;
@@ -186,42 +209,43 @@
             background: none;
             padding: 0;
         }
-        .message.assistant strong { font-weight: 600; color: #fff; }
+        .message.assistant strong { font-weight: 600; color: var(--text); }
         .message.assistant blockquote {
-            border-left: 3px solid #EE0000;
+            border-left: 3px solid var(--redhat-red);
             padding-left: 1em;
             margin: 0.5em 0;
-            color: #9ca3af;
+            color: var(--text-muted);
         }
 
+        /* Semantic error messages (Grafana-aligned) */
         .message.error {
-            background: #7f1d1d;
+            background: var(--blocked);
             color: #fecaca;
-            border: 1px solid #991b1b;
+            border: none;
         }
 
         .message.error-hap {
-            background: rgb(255, 115, 131);
-            color: #333;
-            border: 1px solid rgb(220, 90, 105);
+            background: var(--swearing);
+            color: #1A0B10;
+            border: none;
         }
 
         .message.error-language {
-            background: rgb(138, 184, 255);
-            color: #333;
-            border: 1px solid rgb(100, 150, 220);
+            background: var(--nonenglish);
+            color: #0B1020;
+            border: none;
         }
 
         .message.error-prompt-injection {
-            background: rgb(202, 149, 229);
-            color: #333;
-            border: 1px solid rgb(170, 120, 200);
+            background: var(--jailbreak);
+            color: #160A1F;
+            border: none;
         }
 
         .message.error-regex {
-            background: rgb(255, 238, 82);
-            color: #333;
-            border: 1px solid rgb(220, 200, 60);
+            background: var(--nonlemon);
+            color: #141414;
+            border: none;
         }
 
         .message.typing::after {
@@ -229,7 +253,7 @@
             display: inline-block;
             width: 8px;
             height: 16px;
-            background: #9ca3af;
+            background: var(--text-muted);
             margin-left: 4px;
             animation: blink 1s infinite;
         }
@@ -241,16 +265,16 @@
 
         .input-area {
             padding: 16px;
-            background: #111827;
-            border-top: 1px solid #374151;
+            background: var(--bg);
+            border-top: 1px solid var(--border);
             border-radius: 0 0 12px 12px;
         }
 
         .input-wrapper {
             display: flex;
             align-items: center;
-            background: #1f2937;
-            border: 1px solid #374151;
+            background: var(--panel);
+            border: 1px solid var(--border);
             border-radius: 12px;
             padding: 4px;
         }
@@ -261,7 +285,7 @@
             background: transparent;
             border: none;
             font-size: 15px;
-            color: #fff;
+            color: var(--text);
             outline: none;
             resize: none;
             min-height: 24px;
@@ -272,14 +296,14 @@
         }
 
         .input-wrapper textarea::placeholder {
-            color: #6b7280;
+            color: var(--text-muted);
         }
 
         .input-wrapper button {
             width: 44px;
             height: 44px;
-            background: #374151;
-            color: #9ca3af;
+            background: var(--bubble-bot);
+            color: var(--text-muted);
             border: none;
             border-radius: 8px;
             cursor: pointer;
@@ -290,8 +314,8 @@
         }
 
         .input-wrapper button:hover {
-            background: #4b5563;
-            color: #fff;
+            background: var(--bubble-user);
+            color: var(--text);
         }
 
         .input-wrapper button:disabled {
@@ -306,7 +330,7 @@
         }
 
         #stop-btn {
-            background: #dc2626;
+            background: var(--blocked);
             color: white;
         }
 
@@ -317,29 +341,29 @@
         .char-count {
             text-align: right;
             font-size: 11px;
-            color: #6b7280;
+            color: var(--text-muted);
             margin-top: 8px;
             padding-right: 8px;
         }
 
-        .char-count.warning { color: #f59e0b; }
-        .char-count.error { color: #ef4444; }
+        .char-count.warning { color: var(--nonlemon); }
+        .char-count.error { color: var(--swearing); }
 
         .footer {
             text-align: center;
             padding: 20px;
             padding-bottom: calc(20px + env(safe-area-inset-bottom));
             font-size: 13px;
-            color: #6b7280;
+            color: var(--text-muted);
         }
 
         .footer a {
-            color: #9ca3af;
+            color: var(--text-muted);
             text-decoration: none;
         }
 
         .footer a:hover {
-            color: #fff;
+            color: var(--text);
         }
 
         /* Scrollbar */
@@ -350,7 +374,7 @@
             background: transparent;
         }
         .messages::-webkit-scrollbar-thumb {
-            background: #4b5563;
+            background: var(--border);
             border-radius: 3px;
         }
 

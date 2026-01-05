@@ -48,6 +48,19 @@
 | Prompt Injection Detector | 10 | - |
 | Language Detector | 10 | - |
 
+### Configuration D - Detector-Heavy (6000 VUs Mixed) ⭐ BEST
+
+| Component | Replicas | Resources |
+|-----------|----------|-----------|
+| LLM (vLLM via LLM-D) | 47 | 1 GPU each |
+| Guardrails Orchestrator | 75 | Scaled CPU |
+| Chunker Service | 75 | Scaled CPU |
+| Application | 30 | - |
+| Inference Gateway | 20 | - |
+| HAP Detector | 30 | 1 GPU each |
+| Prompt Injection Detector | 30 | - |
+| Language Detector | 30 | - |
+
 ### vLLM Configuration
 ```
 --max-model-len=512
@@ -134,13 +147,13 @@ Safe-only prompts: 100% go through to LLM for inference
 ### Bottlenecks Identified (in order)
 1. **Chunker Service** - Initial bottleneck, resolved with more replicas + CPU
 2. **Guardrails Orchestrator** - Second bottleneck, resolved with more replicas + CPU
-3. **Detectors** - Minor bottleneck, resolved with more replicas
+3. **Detectors** - **Major bottleneck** - scaling from 18→30 replicas improved throughput by 30%
 4. **LLM (vLLM)** - Final bottleneck for safe-only prompts at high VUs
 
 ### Performance Characteristics
 - **Blocked requests are fast**: ~54% of mixed prompts blocked at input = instant response
 - **Safe requests are slow**: Full LLM inference takes ~20s average
-- **60s timeout exists**: Somewhere in the stack (not identified), affects ~5-7% at high load
+- **60s timeout identified**: **AWS Classic Load Balancer idle timeout** - increased to 300s to match Route
 - **LLM is the ceiling**: With 47-48 replicas, max ~4000 safe VUs before timeout issues
 
 ### Scaling Limits Discovered
@@ -149,7 +162,9 @@ Safe-only prompts: 100% go through to LLM for inference
 | Orchestrator 50→75 | No improvement (not bottleneck) |
 | Chunker 30→75 | No improvement (not bottleneck) |
 | LLM 48→47 | Slight degradation |
-| LLM 47→51 | Minimal improvement (+1% throughput) - 60s timeout is the real limiter |
+| LLM 47→51 | Minimal improvement (+1% throughput) |
+| **Detectors 18→30** | **+30% throughput (334→436 req/s)** |
+| **LLM 51→47 + Detectors 18→30** | **Net +30% improvement - detectors matter more!** |
 
 ### Thresholds Used
 ```javascript
@@ -167,16 +182,48 @@ thresholds: {
 ## Recommendations
 
 ### For Higher Safe-Prompt Throughput (Beyond 4000 VUs)
-- **Find and increase the 60s timeout** - this is the primary limiter at 6000 VUs
-  - Check: Orchestrator HTTP client, Gateway, Istio sidecar, vLLM server
-- Adding more LLM replicas has diminishing returns until timeout is fixed
+- **60s timeout was AWS Classic LB** - increased to 300s, reduced errors from 0.10% to 0.05%
+- **Timeouts to align**: Route (300s), AWS LB (300s), HTTPRoute, Orchestrator HTTP client
+- Adding more LLM replicas for marginal latency improvement
 - Reduce `--max-model-len` for shorter responses (faster completion)
-- Adding more orchestrator/chunker won't help (already scaled past bottleneck)
+- Use original scheduler config: `queue-scorer` (w:3) + `kv-cache-utilization-scorer` (w:2)
 
 ### For Higher Mixed-Prompt Throughput
-- Current setup handles **6000 VUs** successfully (324 req/s)
+- **Current best: Configuration D** handles 6000 VUs at **436 req/s**
+- **Scale detectors aggressively** - they are a bigger bottleneck than LLM for mixed workloads
+- Optimal ratio appears to be ~1.5 detector replicas per LLM replica
 - Could potentially push to 8000+ VUs since ~58% are blocked instantly
 - Mixed workloads scale better because guardrails reduce effective LLM load
+
+---
+
+## New Cluster Results (apps.lemon.rhoai.rh-aiservices-bu.com)
+
+### Test Results - 6000 VUs Mixed Prompts
+
+| Test | Config | LLM | Detectors | Throughput | Success | Error | p(50) TTFB | p(95) TTFB | Status |
+|------|--------|-----|-----------|------------|---------|-------|------------|------------|--------|
+| Initial | - | 75 | 15-20 | 189 req/s | 99.39% | 0.60% | - | 18.79s | ❌ TTFB |
+| + scheduler tune | - | 75 | 15-20 | 190 req/s | 99.59% | 0.40% | - | 16.73s | ❌ TTFB |
+| Original scheduler | - | 75 | 15-20 | 189 req/s | 99.89% | 0.10% | - | 16.76s | ❌ TTFB |
+| + 300s LB timeout | - | 75 | 15-20 | 188 req/s | 99.94% | 0.05% | - | 17.12s | ❌ TTFB |
+| + more detectors | - | 51 | 18 | 334 req/s | 98.49% | 1.50% | 399ms | 8.1s | ✅ Pass |
+| **Detector-heavy** | **D** | **47** | **30** | **436 req/s** | **98.44%** | **1.55%** | **203ms** | **6.3s** | **✅ Pass** |
+
+### Key Findings
+
+#### 60s Timeout Source
+**AWS Classic Load Balancer idle timeout** was cutting off requests at 60s.
+- Increasing to 300s eliminated the timeout wall
+- Max TTFB dropped from 60s to 51s (natural completion)
+- Error rate improved from 0.10% to 0.05%
+
+#### Detectors are a Major Bottleneck
+**Trading LLM replicas for detector replicas dramatically improves throughput:**
+- 51 LLM + 18 detectors → 334 req/s
+- 47 LLM + 30 detectors → **436 req/s (+30%)**
+- Median TTFB improved from 399ms to **203ms** (2x faster!)
+- Detectors were the hidden bottleneck, not LLM capacity
 
 ### Monitoring Metrics
 - `kserve_vllm:num_requests_waiting` - vLLM queue depth (was 0, meaning LLM can accept requests but inference is slow)

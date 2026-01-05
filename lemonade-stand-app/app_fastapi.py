@@ -584,7 +584,7 @@ async def root():
         with open(static_path, "r") as f:
             return HTMLResponse(content=f.read())
 
-    # Fallback inline HTML
+    # Fallback inline HTML (Grafana-aligned color scheme)
     return HTMLResponse(content="""
 <!DOCTYPE html>
 <html lang="en">
@@ -593,28 +593,35 @@ async def root():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lemonade Stand Chat</title>
     <style>
+        :root {
+            --bg: #171A1C; --panel: #1F242B; --bubble-bot: #2B3440; --bubble-user: #242B33;
+            --text: #E6E8EB; --text-muted: #A7B0BA; --border: #323A44;
+            --redhat-red: #EE0000; --nonlemon: #FCE957; --nonenglish: #8CA3EF;
+            --jailbreak: #C48AE6; --swearing: #F86877; --blocked: #D6182D;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; height: 100vh; display: flex; flex-direction: column; }
-        .header { background: #EE0000; color: white; padding: 15px; text-align: center; font-size: 20px; font-weight: bold; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; }
+        .header { background: var(--redhat-red); color: white; padding: 15px; text-align: center; font-size: 20px; font-weight: bold; }
         .chat-container { flex: 1; overflow-y: auto; padding: 20px; max-width: 800px; margin: 0 auto; width: 100%; }
-        .message { margin: 10px 0; padding: 12px 16px; border-radius: 12px; max-width: 80%; line-height: 1.5; }
-        .user { background: #EE0000; color: white; margin-left: auto; }
-        .assistant { background: white; border: 1px solid #ddd; }
-        .error { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
-        .error-hap { background: rgb(255, 115, 131); color: #333; border: 1px solid rgb(220, 90, 105); }
-        .error-language { background: rgb(138, 184, 255); color: #333; border: 1px solid rgb(100, 150, 220); }
-        .error-prompt-injection { background: rgb(202, 149, 229); color: #333; border: 1px solid rgb(170, 120, 200); }
-        .error-regex { background: rgb(255, 238, 82); color: #333; border: 1px solid rgb(220, 200, 60); }
-        .input-container { padding: 20px; background: white; border-top: 1px solid #ddd; }
+        .message { margin: 10px 0; padding: 12px 16px; border-radius: 14px; max-width: 80%; line-height: 1.5; }
+        .user { background: var(--bubble-user); color: var(--text); margin-left: auto; border-left: 4px solid var(--blocked); }
+        .assistant { background: var(--bubble-bot); color: var(--text); }
+        .error { background: var(--blocked); color: #fecaca; }
+        .error-hap { background: var(--swearing); color: #1A0B10; }
+        .error-language { background: var(--nonenglish); color: #0B1020; }
+        .error-prompt-injection { background: var(--jailbreak); color: #160A1F; }
+        .error-regex { background: var(--nonlemon); color: #141414; }
+        .input-container { padding: 20px; background: var(--bg); border-top: 1px solid var(--border); }
         .input-wrapper { max-width: 800px; margin: 0 auto; display: flex; gap: 10px; }
-        input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; }
-        button { padding: 12px 24px; background: #EE0000; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; }
-        button:hover { background: #cc0000; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
+        input { flex: 1; padding: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 16px; background: var(--panel); color: var(--text); }
+        input::placeholder { color: var(--text-muted); }
+        button { padding: 12px 24px; background: var(--bubble-bot); color: var(--text); border: none; border-radius: 8px; cursor: pointer; font-size: 16px; }
+        button:hover { background: var(--bubble-user); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
         .examples { padding: 10px 20px; text-align: center; }
-        .examples button { background: #f0f0f0; color: #333; margin: 5px; padding: 8px 16px; font-size: 14px; }
-        .examples button:hover { background: #e0e0e0; }
-        .footer { text-align: center; padding: 10px; font-size: 12px; color: #666; }
+        .examples button { background: var(--bubble-bot); color: var(--text); margin: 5px; padding: 8px 16px; font-size: 14px; border: 1px solid var(--border); }
+        .examples button:hover { background: var(--bubble-user); }
+        .footer { text-align: center; padding: 10px; font-size: 12px; color: var(--text-muted); }
     </style>
 </head>
 <body>

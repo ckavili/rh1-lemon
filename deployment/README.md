@@ -29,6 +29,7 @@ Apply the YAML files in the following order:
 #### MinIO Storage for Detector Models
 
 ```bash
+oc new-project lemonade-stand
 oc apply -f minio-storage-models.yaml
 ```
 
@@ -124,7 +125,7 @@ curl -X POST https://$ORCH_ROUTE/api/v2/chat/completions-detection \
 Once the orchestrator is working correctly, deploy the frontend:
 
 ```bash
-oc apply -f ../gradio-lemonade-stand-app/openshift-deployment.yaml -n lemonade-stand
+oc apply -f ../lemonade-stand-app/openshift-deployment.yaml -n lemonade-stand
 ```
 
 ## Architecture
