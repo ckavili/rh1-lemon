@@ -507,6 +507,12 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
                             return
 
                         if content:
+                            # Skip duplicate content (upstream orchestrator sometimes sends overlapping chunks)
+                            content_stripped = content.lstrip()
+                            if content_stripped and full_response.rstrip().endswith(content_stripped):
+                                print(f"[DEBUG] Skipping duplicate chunk: {repr(content)}")
+                                continue
+
                             full_response += content
                             yield {"type": "chunk", "content": content}
                             # Add newline after each chunk for markdown formatting
