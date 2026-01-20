@@ -585,6 +585,7 @@
 
         let abortController = null;
         let stopRequested = false;
+        let isStreaming = false;
 
         function stopStreaming() {
             stopRequested = true;
@@ -640,8 +641,9 @@
 
         async function sendMessage() {
             const message = messageInput.value.trim();
-            if (!message) return;
+            if (!message || isStreaming) return;
 
+            isStreaming = true;
             addMessage(message, 'user');
             messageInput.value = '';
             messageInput.style.height = 'auto'; // Reset height
@@ -783,6 +785,7 @@
             }
 
             assistantDiv.classList.remove('typing');
+            isStreaming = false;
             showSendButton();
             messageInput.focus();
         }

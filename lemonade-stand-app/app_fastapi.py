@@ -362,6 +362,7 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
         ],
         "stream": True,
         "max_tokens": 200,
+        "temperature": 0,
         "detectors": {
             "input": {
                 "hap": {},
@@ -535,7 +536,7 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
 
                     # Check if response was truncated due to token limit
                     if last_finish_reason == "length":
-                        truncation_msg = "\n\n_🍋 To keep the lemonade flowing for everyone, we've limited this response. Try asking a shorter, more focused question!_"
+                        truncation_msg = "\n\n---\n🍋🍋🍋 Maximum Response Length Reached 🍋🍋🍋\n\n_To keep the lemonade flowing for everyone, we've cut-off this response to a maximum length. Try asking a question that can be answered with a shorter response!_"
                         yield {"type": "chunk", "content": truncation_msg}
                         print(f"[DEBUG] Response truncated (finish_reason=length), appended truncation message")
 
@@ -676,6 +677,7 @@ async def root():
         const chat = document.getElementById('chat');
         const input = document.getElementById('message');
         const sendBtn = document.getElementById('send');
+        let isStreaming = false;
 
         function addMessage(content, type) {
             const div = document.createElement('div');
@@ -693,8 +695,9 @@ async def root():
 
         async function sendMessage() {
             const message = input.value.trim();
-            if (!message) return;
+            if (!message || isStreaming) return;
 
+            isStreaming = true;
             addMessage(message, 'user');
             input.value = '';
             sendBtn.disabled = true;
@@ -741,10 +744,11 @@ async def root():
             } catch (e) {
                 assistantDiv.textContent = 'Error: ' + e.message;
                 assistantDiv.className = 'message error';
+            } finally {
+                isStreaming = false;
+                sendBtn.disabled = false;
+                input.focus();
             }
-
-            sendBtn.disabled = false;
-            input.focus();
         }
     </script>
 </body>
