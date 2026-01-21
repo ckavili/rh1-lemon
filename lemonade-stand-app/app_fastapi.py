@@ -6,6 +6,7 @@ Uses aiohttp for reliable SSE streaming from upstream API.
 
 import asyncio
 import json
+import logging
 import os
 import re
 import ssl
@@ -20,6 +21,18 @@ from pydantic import BaseModel
 
 # Suppress SSL warnings
 warnings.filterwarnings("ignore")
+
+# =============================================================================
+# Logging Configuration
+# =============================================================================
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Configuration
@@ -69,7 +82,7 @@ MAX_INPUT_CHARS = 100
 # Regex Patterns
 # =============================================================================
 
-FRUIT_REGEX_PATTERNS = [
+ALL_REGEX_PATTERNS = [
     # English fruits
     r"\b(?i:oranges?|apples?|cranberr(?:y|ies)|pineapples?|grapes?|strawberr(?:y|ies)|blueberr(?:y|ies)|watermelons?|durians?|cloudberr(?:y|ies)|bananas?|mangoes?|peaches?|pears?|plums?|cherr(?:y|ies)|kiwifruits?|kiwis?|papayas?|avocados?|coconuts?|raspberr(?:y|ies)|blackberr(?:y|ies)|pomegranates?|figs?|apricots?|nectarines?|tangerines?|clementines?|grapefruits?|limes?|passionfruits?|dragonfruits?|lychees?|guavas?|persimmons?)\b",
     # Turkish fruits
@@ -100,20 +113,6 @@ FRUIT_REGEX_PATTERNS = [
     r"\b(?i:संतरा|ऑरेंज|सेब|क्रैनबेरी|अनानास|अंगूर|स्ट्रॉबेरी|ब्लूबेरी|तरबूज|ड्यूरियन|क्लाउडबेरी|केला|मैंगो|आड़ू|नाशपाती|आलूबुखारा|चेरी|कीवी|पपीता|एवोकाडो|नारियल|रास्पबेरी|ब्लैकबेरी|अनार|अंजीर|खजूर|खुबानी|नेकटेरिन|मंडारिन|क्लेमेंटाइन|ग्रेपफ्रूट|नींबू|पासनफ्रूट|ड्रैगन फ्रूट|लीची|अमरूद|तेंदू)\b",
 ]
 
-PROMPT_INJECTION_PATTERNS = [
-    r"(?i)\b(ignore|disregard|override|bypass|forget)\b.*\b(previous|above|earlier|system|developer|guardrail|rules?|instructions?)\b",
-    r"(?i)\b(this is (the )?only rule|the only rule|new rules?|replace (all )?rules?)\b",
-    r"(?i)\b(from now on|starting now|effective immediately)\b",
-    r"(?i)\b(act as|pretend to be|role-?play as|jailbreak|devmode)\b",
-    r"(?i)\b(do not|don't)\s+(say|write|mention|use)\b",
-    r"(?i)\byou (now )?understand\b.*\b(turkish|swedish|german|french|finnish|all languages)\b",
-    r"(?i)\b(new system prompt|override (the )?system|ignore safety)\b",
-    r"(?i)\bregardless (of|regarding)\b.*\b(rules?|policy|policies|instructions?)\b",
-    r"(?i)\b(even if|regardless)\b.*\b(violates?|contradicts?)\b.*\b(rules?|policy|policies|safety)\b",
-    r"(?i)\b(system|developer)\s+(prompt|message|instructions?)\b",
-]
-
-ALL_REGEX_PATTERNS = FRUIT_REGEX_PATTERNS + PROMPT_INJECTION_PATTERNS
 
 # Compile regex patterns for efficient local matching
 COMPILED_REGEX_PATTERNS = [re.compile(pattern) for pattern in ALL_REGEX_PATTERNS]
@@ -144,7 +143,7 @@ DETECTOR_MESSAGES = {
     "regex_competitor_output": "🍏 Oops! I almost talked about other fruits. Let's stick to lemons!",
     # Language detection
     "language_detection_input": "🇬🇧 I can only communicate in English. Please rephrase your message in English.",
-    "language_detection_output": "🇬🇧 I can only answer in English.",
+    "language_detection_output": "🇬🇧 Oops! I almost answered in non-English. Let's stick to English!",
 }
 
 # =============================================================================
@@ -259,7 +258,7 @@ async def lifespan(app: FastAPI):
             keepalive_timeout=30,  # Longer keepalive - internal services are stable
             enable_cleanup_closed=True,
         )
-        print(f"[INFO] Using HTTPS with connection pooling (internal service mode)")
+        logger.info("Using HTTPS with connection pooling (internal service mode)")
     else:
         # External route - short keepalive due to HAProxy timeouts
         connector = aiohttp.TCPConnector(
@@ -269,7 +268,7 @@ async def lifespan(app: FastAPI):
             keepalive_timeout=5,  # Short - OpenShift routes close connections quickly
             enable_cleanup_closed=True,
         )
-        print(f"[INFO] Using HTTPS with short keepalive (external route mode)")
+        logger.info("Using HTTPS with short keepalive (external route mode)")
 
     aiohttp_session = aiohttp.ClientSession(
         connector=connector,
@@ -280,14 +279,14 @@ async def lifespan(app: FastAPI):
         ),
     )
 
-    print(f"[INFO] API URL: {API_URL}")
-    print(f"[INFO] Model: {VLLM_MODEL}")
+    logger.info(f"API URL: {API_URL}")
+    logger.info(f"Model: {VLLM_MODEL}")
 
     yield
 
     # Cleanup
     await aiohttp_session.close()
-    print("[INFO] aiohttp session closed")
+    logger.info("aiohttp session closed")
 
 
 # =============================================================================
@@ -317,8 +316,8 @@ class ChatRequest(BaseModel):
 async def process_chat(message: str) -> AsyncGenerator[dict, None]:
     """Process chat message and yield SSE events using aiohttp."""
 
-    print(f"[DEBUG] ===== New chat request =====")
-    print(f"[DEBUG] User message: {repr(message)}")
+    logger.debug("===== New chat request =====")
+    logger.debug(f"User message: {repr(message)}")
 
     # Check message length
     if len(message) > MAX_INPUT_CHARS:
@@ -333,14 +332,14 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
 
     # LOCAL REGEX CHECK: Pre-filter before sending to orchestrator
     # This reduces load on the orchestrator by catching obvious violations locally
-    print(f"[DEBUG] Checking local regex patterns...")
+    logger.debug("Checking local regex patterns...")
     if check_regex_locally(message):
         # Find which pattern matched for logging
         for i, pattern in enumerate(COMPILED_REGEX_PATTERNS):
             match = pattern.search(message)
             if match:
-                print(f"[DEBUG] Local regex BLOCKED - pattern #{i} matched: {repr(match.group())}")
-                print(f"[DEBUG] Pattern: {ALL_REGEX_PATTERNS[i][:100]}...")
+                logger.debug(f"Local regex BLOCKED - pattern #{i} matched: {repr(match.group())}")
+                logger.debug(f"Pattern: {ALL_REGEX_PATTERNS[i][:100]}...")
                 break
         await metrics.increment_local_regex_block()
         yield {
@@ -349,7 +348,7 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
             "detector_type": "regex"
         }
         return
-    print(f"[DEBUG] Local regex check passed")
+    logger.debug("Local regex check passed")
 
     # Build request payload - regex already checked locally, so only send to orchestrator
     # for HAP, prompt injection, and language detection
@@ -395,18 +394,12 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
         try:
             chunk_data = json.loads(line[6:])
         except json.JSONDecodeError:
-            print(f"[DEBUG] Failed to parse SSE line: {line[:200]}")
+            logger.debug(f"Failed to parse SSE line: {line[:200]}")
             return None, False, None, None, None
 
         warnings_list = chunk_data.get("warnings", [])
         detections = chunk_data.get("detections", {})
         choices = chunk_data.get("choices", [])
-
-        # Log raw chunk data for debugging
-        if detections:
-            print(f"[DEBUG] Detections in chunk: {json.dumps(detections, indent=2)}")
-        if warnings_list:
-            print(f"[DEBUG] Warnings in chunk: {json.dumps(warnings_list, indent=2)}")
 
         # Process detections for metrics
         for det in detections.get("input", []):
@@ -435,13 +428,13 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
                                 detector_key = f"{detector_id}_{direction}"
                                 if detector_key not in detected_types:
                                     detected_types.append(detector_key)
-                                    print(f"[BLOCKED] {detector_key} (score: {score:.2f})")
+                                    logger.info(f"BLOCKED: {detector_key} (score: {score:.2f})")
 
         if detected_types:
             reasons = [DETECTOR_MESSAGES.get(dt, f"Detection: {dt}") for dt in detected_types]
             block_msg = " ".join(reasons) + " Is there anything else I can help you with?"
-            print(f"[DEBUG] Blocking response - detected types: {detected_types}")
-            print(f"[DEBUG] Block message: {block_msg}")
+            logger.debug(f"Blocking response - detected types: {detected_types}")
+            logger.debug(f"Block message: {block_msg}")
             # Determine primary detector type for styling
             primary_type = detected_types[0]
             if primary_type.startswith("language_detection"):
@@ -464,7 +457,6 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
             delta = choice.get("delta", {})
             content = delta.get("content", "")
             if content:
-                print(f"[DEBUG] Chunk content: {repr(content)}")
                 return content, False, None, None, finish_reason
 
         return None, False, None, None, finish_reason
@@ -474,12 +466,12 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
 
     for attempt in range(max_retries + 1):
         try:
-            print(f"[DEBUG] Sending request to orchestrator (attempt {attempt + 1}/{max_retries + 1})")
+            logger.debug(f"Sending request to orchestrator (attempt {attempt + 1}/{max_retries + 1})")
             async with aiohttp_session.post(API_URL, json=payload, headers=headers) as response:
-                print(f"[DEBUG] Orchestrator response status: {response.status}")
+                logger.debug(f"Orchestrator response status: {response.status}")
                 if response.status != 200:
                     error_text = await response.text()
-                    print(f"[ERROR] API returned {response.status}: {error_text[:500]}")
+                    logger.error(f"API returned {response.status}: {error_text[:500]}")
                     yield {"type": "error", "message": f"API error: {response.status}"}
                     return
 
@@ -514,13 +506,13 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
                         # Track finish_reason
                         if finish_reason:
                             last_finish_reason = finish_reason
-                            print(f"[DEBUG] finish_reason: {finish_reason}")
+                            logger.debug(f"finish_reason: {finish_reason}")
 
                         if content:
                             # Skip duplicate content (upstream orchestrator sometimes sends overlapping chunks)
                             content_stripped = content.lstrip()
                             if content_stripped and full_response.rstrip().endswith(content_stripped):
-                                print(f"[DEBUG] Skipping duplicate chunk: {repr(content)}")
+                                logger.debug(f"Skipping duplicate chunk: {repr(content)}")
                                 continue
 
                             full_response += content
@@ -530,15 +522,15 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
                             yield {"type": "chunk", "content": "\n"}
 
                 if full_response:
-                    print(f"[DEBUG] Stream completed successfully")
-                    print(f"[DEBUG] Full response length: {len(full_response)} chars")
-                    print(f"[DEBUG] Final finish_reason: {last_finish_reason}")
+                    logger.debug("Stream completed successfully")
+                    logger.debug(f"Full response length: {len(full_response)} chars")
+                    logger.debug(f"Final finish_reason: {last_finish_reason}")
 
                     # Check if response was truncated due to token limit
                     if last_finish_reason == "length":
                         truncation_msg = "\n\n---\n🍋🍋🍋 Maximum Response Length Reached 🍋🍋🍋\n\n_To keep the lemonade flowing for everyone, we've cut-off this response to a maximum length. Try asking a question that can be answered with a shorter response!_"
                         yield {"type": "chunk", "content": truncation_msg}
-                        print(f"[DEBUG] Response truncated (finish_reason=length), appended truncation message")
+                        logger.debug("Response truncated (finish_reason=length), appended truncation message")
 
                     yield {"type": "done"}
                     return

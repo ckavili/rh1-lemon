@@ -30,7 +30,7 @@ data:
           hostname: guardrails-detector-ibm-hap-predictor
           port: 80
         chunker_id: sentence
-        default_threshold: 0.5
+        default_threshold: 0.55
       prompt_injection:
         type: text_contents
         service:
@@ -41,7 +41,7 @@ data:
       language_detection:
         type: text_contents
         service:
-          hostname: language-detector-predictor
+          hostname: lingua-detector
           port: 80
         chunker_id: sentence
         default_threshold: 0.7

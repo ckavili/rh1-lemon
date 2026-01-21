@@ -24,7 +24,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "79a73517-235d-43ef-9907-e01112e36b8b"
+        "uid": "fda11a97-11b2-42e2-9a60-5537233a38b5"
       },
       "fieldConfig": {
         "defaults": {
@@ -109,7 +109,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "🍏Non Lemon"
+                "value": "🍏Non-Lemon"
               },
               {
                 "id": "color",
@@ -169,7 +169,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "79a73517-235d-43ef-9907-e01112e36b8b"
+        "uid": "fda11a97-11b2-42e2-9a60-5537233a38b5"
       },
       "fieldConfig": {
         "defaults": {
@@ -290,7 +290,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "79a73517-235d-43ef-9907-e01112e36b8b"
+        "uid": "fda11a97-11b2-42e2-9a60-5537233a38b5"
       },
       "fieldConfig": {
         "defaults": {
@@ -411,7 +411,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "79a73517-235d-43ef-9907-e01112e36b8b"
+        "uid": "fda11a97-11b2-42e2-9a60-5537233a38b5"
       },
       "fieldConfig": {
         "defaults": {
@@ -532,7 +532,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "79a73517-235d-43ef-9907-e01112e36b8b"
+        "uid": "fda11a97-11b2-42e2-9a60-5537233a38b5"
       },
       "fieldConfig": {
         "defaults": {
@@ -652,7 +652,7 @@
     }
   ],
   "preload": false,
-  "refresh": "5s",
+  "refresh": "auto",
   "schemaVersion": 42,
   "tags": [],
   "templating": {
@@ -666,5 +666,5 @@
   "timezone": "browser",
   "title": "Prometheus Queries for Guardrail Metrics Dashboard",
   "uid": "34d7e0c2-afeb-4939-bbf9-c9b0ad33595c",
-  "version": 2
+  "version": 5
 }

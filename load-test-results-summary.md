@@ -1,6 +1,6 @@
 # Load Test Results Summary
 
-**Date**: 2026-01-02
+**Date**: 2026-01-02 (updated 2026-01-06)
 **Application**: Lemonade Stand with FMS Guardrails Orchestrator
 **Test Tool**: k6
 **Test Scenario**: `scale` (14 minute ramp-up)
@@ -48,7 +48,7 @@
 | Prompt Injection Detector | 10 | - |
 | Language Detector | 10 | - |
 
-### Configuration D - Detector-Heavy (6000 VUs Mixed) ⭐ BEST
+### Configuration D - Detector-Heavy (6000 VUs Mixed)
 
 | Component | Replicas | Resources |
 |-----------|----------|-----------|
@@ -60,6 +60,21 @@
 | HAP Detector | 30 | 1 GPU each |
 | Prompt Injection Detector | 30 | - |
 | Language Detector | 30 | - |
+
+### Configuration E - High-Scale Balanced (6000 VUs Mixed) ⭐ CURRENT BEST
+
+| Component | Replicas | Resources |
+|-----------|----------|-----------|
+| LLM (vLLM via LLM-D) | 62 | 1 GPU each |
+| Guardrails Orchestrator | 75 | Scaled CPU |
+| Chunker Service | 75 | Scaled CPU |
+| Application (FastAPI) | 75 | - |
+| Inference Gateway | 50 | - |
+| HAP Detector | 36 | 1 GPU each |
+| Prompt Injection Detector | 34 | - |
+| Language Detector | 36 | - |
+
+**Note**: Prompt Injection only runs on input, HAP/Language run on both input+output, hence the 2:1 ratio.
 
 ### vLLM Configuration
 ```
@@ -189,11 +204,24 @@ thresholds: {
 - Use original scheduler config: `queue-scorer` (w:3) + `kv-cache-utilization-scorer` (w:2)
 
 ### For Higher Mixed-Prompt Throughput
-- **Current best: Configuration D** handles 6000 VUs at **436 req/s**
-- **Scale detectors aggressively** - they are a bigger bottleneck than LLM for mixed workloads
-- Optimal ratio appears to be ~1.5 detector replicas per LLM replica
+- **Current best: Configuration E** handles 6000 VUs at **474 req/s**
+- **Scale all components together** - LLM, detectors, AND FastAPI must be balanced
+- **FastAPI is critical** - at 50 replicas caused timeouts, 75 replicas fixed it
+- Optimal detector ratio: HAP/Language ~1.06x Prompt Injection (input+output vs input-only)
 - Could potentially push to 8000+ VUs since ~58% are blocked instantly
 - Mixed workloads scale better because guardrails reduce effective LLM load
+
+### Configuration E Optimal Ratios (474 req/s at 6000 VUs)
+| Component | Replicas | Ratio to LLM |
+|-----------|----------|--------------|
+| LLM | 62 | 1.0x |
+| FastAPI | 75 | 1.2x |
+| Orchestrator | 75 | 1.2x |
+| Chunker | 75 | 1.2x |
+| HAP Detector | 36 | 0.58x |
+| Language Detector | 36 | 0.58x |
+| Prompt Injection | 34 | 0.55x |
+| Ingress | 50 | 0.8x |
 
 ---
 
@@ -201,14 +229,19 @@ thresholds: {
 
 ### Test Results - 6000 VUs Mixed Prompts
 
-| Test | Config | LLM | Detectors | Throughput | Success | Error | p(50) TTFB | p(95) TTFB | Status |
-|------|--------|-----|-----------|------------|---------|-------|------------|------------|--------|
-| Initial | - | 75 | 15-20 | 189 req/s | 99.39% | 0.60% | - | 18.79s | ❌ TTFB |
-| + scheduler tune | - | 75 | 15-20 | 190 req/s | 99.59% | 0.40% | - | 16.73s | ❌ TTFB |
-| Original scheduler | - | 75 | 15-20 | 189 req/s | 99.89% | 0.10% | - | 16.76s | ❌ TTFB |
-| + 300s LB timeout | - | 75 | 15-20 | 188 req/s | 99.94% | 0.05% | - | 17.12s | ❌ TTFB |
-| + more detectors | - | 51 | 18 | 334 req/s | 98.49% | 1.50% | 399ms | 8.1s | ✅ Pass |
-| **Detector-heavy** | **D** | **47** | **30** | **436 req/s** | **98.44%** | **1.55%** | **203ms** | **6.3s** | **✅ Pass** |
+| Test | Config | LLM | Detectors (H/L/PI) | FastAPI | Throughput | Success | Error | p(50) TTFB | p(95) TTFB | Status |
+|------|--------|-----|-------------------|---------|------------|---------|-------|------------|------------|--------|
+| Initial | - | 75 | 15-20 each | ? | 189 req/s | 99.39% | 0.60% | - | 18.79s | ❌ TTFB |
+| + scheduler tune | - | 75 | 15-20 each | ? | 190 req/s | 99.59% | 0.40% | - | 16.73s | ❌ TTFB |
+| Original scheduler | - | 75 | 15-20 each | ? | 189 req/s | 99.89% | 0.10% | - | 16.76s | ❌ TTFB |
+| + 300s LB timeout | - | 75 | 15-20 each | ? | 188 req/s | 99.94% | 0.05% | - | 17.12s | ❌ TTFB |
+| + more detectors | - | 51 | 18 each | ? | 334 req/s | 98.49% | 1.50% | 399ms | 8.1s | ✅ Pass |
+| Detector-heavy | D | 47 | 30 each | 30 | 436 req/s | 98.44% | 1.55% | 203ms | 6.3s | ✅ Pass |
+| Peak throughput | - | 47 | 30 each | ? | 482 req/s | 98.33% | 1.66% | 200ms | 2.61s | ✅ Pass |
+| LLM reduced | - | 47 | 37/37/32 | 50 | 283 req/s | 93.54% | 6.45% | 158ms | 120s | ❌ Timeout |
+| + more FastAPI | - | 62 | 37/37/32 | 75 | 455 req/s | 96.85% | 3.14% | 161ms | 2.26s | ✅ Pass |
+| **Balanced** | **E** | **62** | **36/36/34** | **75** | **474 req/s** | **97.27%** | **2.72%** | **166ms** | **2.35s** | **✅ Pass** |
+| LLM too low | - | 55 | 36/36/34 | 75 | 387 req/s | 95.52% | 4.47% | 157ms | 3.91s | ✅ Pass |
 
 ### Key Findings
 
@@ -224,6 +257,23 @@ thresholds: {
 - 47 LLM + 30 detectors → **436 req/s (+30%)**
 - Median TTFB improved from 399ms to **203ms** (2x faster!)
 - Detectors were the hidden bottleneck, not LLM capacity
+
+#### FastAPI Application is Also a Bottleneck
+**When scaling detectors, FastAPI must scale proportionally:**
+- 47 LLM + 37/37/32 detectors + 50 FastAPI → **283 req/s** (timeout failures!)
+- 62 LLM + 37/37/32 detectors + 75 FastAPI → **455 req/s** (passed)
+- FastAPI sits in front of orchestrator - if it can't keep up, requests back up
+
+#### LLM Sweet Spot is 62 Replicas (with current config)
+**More LLM isn't always better, but too few is worse:**
+- 55 LLM → 387 req/s, 4.47% errors
+- 62 LLM → 474 req/s, 2.72% errors
+- At high detector/FastAPI counts, need more LLM to balance
+
+#### Detector Ratio for Input-Only vs Input+Output
+- **Prompt Injection**: Input only → 34 replicas
+- **HAP/Language**: Input + Output → 36 replicas each
+- Ratio ~1:1.06 (roughly equal since blocking happens early)
 
 ### Monitoring Metrics
 - `kserve_vllm:num_requests_waiting` - vLLM queue depth (was 0, meaning LLM can accept requests but inference is slow)
