@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: lingua-detector
-          image: quay.io/ckavili/lingua-language-detector:0.0.23
+          image: quay.io/ckavili/lingua-language-detector:0.0.24
           ports:
             - containerPort: 8080
           resources:
