@@ -15,7 +15,8 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import aiohttp
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -151,31 +152,36 @@ DETECTOR_MESSAGES = {
 # =============================================================================
 
 class AsyncMetricsCollector:
-    """Async-safe metrics storage."""
+    """Async-safe metrics storage with per-source tracking."""
+
+    DETECTOR_NAMES = ["hap", "regex_competitor", "prompt_injection", "language_detection"]
 
     def __init__(self):
         self.lock = asyncio.Lock()
-        self.total_requests = 0
-        self.local_regex_blocks = 0  # Requests blocked locally by regex
-        self.detections = {
-            "hap": {"input": 0, "output": 0},
-            "regex_competitor": {"input": 0, "output": 0},
-            "prompt_injection": {"input": 0, "output": 0},
-            "language_detection": {"input": 0, "output": 0},
-        }
+        self._sources = {}
 
-    async def increment_request(self):
-        async with self.lock:
-            self.total_requests += 1
+    def _ensure_source(self, source: str):
+        if source not in self._sources:
+            self._sources[source] = {
+                "total_requests": 0,
+                "local_regex_blocks": 0,
+                "detections": {d: {"input": 0, "output": 0} for d in self.DETECTOR_NAMES},
+            }
 
-    async def increment_local_regex_block(self):
+    async def increment_request(self, source: str = "audience"):
         async with self.lock:
-            self.local_regex_blocks += 1
-            # Also count as regex_competitor input detection for consistency
-            self.detections["regex_competitor"]["input"] += 1
+            self._ensure_source(source)
+            self._sources[source]["total_requests"] += 1
 
-    async def add_detections(self, detections_data, direction: str):
+    async def increment_local_regex_block(self, source: str = "audience"):
         async with self.lock:
+            self._ensure_source(source)
+            self._sources[source]["local_regex_blocks"] += 1
+            self._sources[source]["detections"]["regex_competitor"]["input"] += 1
+
+    async def add_detections(self, detections_data, direction: str, source: str = "audience"):
+        async with self.lock:
+            self._ensure_source(source)
             if not detections_data:
                 return
             for detection_group in detections_data:
@@ -185,45 +191,56 @@ class AsyncMetricsCollector:
                 for result in results:
                     if isinstance(result, dict):
                         detector_id = result.get("detector_id", "")
-                        if detector_id in self.detections:
-                            self.detections[detector_id][direction] += 1
+                        if detector_id in self._sources[source]["detections"]:
+                            self._sources[source]["detections"][detector_id][direction] += 1
 
     async def get_prometheus_metrics(self) -> str:
         async with self.lock:
             lines = [
                 "# HELP guardrail_requests_total Total number of requests processed",
                 "# TYPE guardrail_requests_total counter",
-                f"guardrail_requests_total {self.total_requests}",
+            ]
+            for source, data in self._sources.items():
+                lines.append(f'guardrail_requests_total{{source="{source}"}} {data["total_requests"]}')
+
+            lines.extend([
                 "",
-                "# HELP guardrail_local_regex_blocks_total Requests blocked locally by regex (not sent to orchestrator)",
+                "# HELP guardrail_local_regex_blocks_total Requests blocked locally by regex",
                 "# TYPE guardrail_local_regex_blocks_total counter",
-                f"guardrail_local_regex_blocks_total {self.local_regex_blocks}",
+            ])
+            for source, data in self._sources.items():
+                lines.append(f'guardrail_local_regex_blocks_total{{source="{source}"}} {data["local_regex_blocks"]}')
+
+            lines.extend([
                 "",
                 "# HELP guardrail_detections_total Total number of guardrail detections",
                 "# TYPE guardrail_detections_total counter",
-            ]
-            for detector, directions in self.detections.items():
-                for direction, count in directions.items():
-                    lines.append(f'guardrail_detections_total{{detector="{detector}",direction="{direction}"}} {count}')
+            ])
+            for source, data in self._sources.items():
+                for detector, directions in data["detections"].items():
+                    for direction, count in directions.items():
+                        lines.append(f'guardrail_detections_total{{detector="{detector}",direction="{direction}",source="{source}"}} {count}')
 
             lines.extend([
                 "",
                 "# HELP guardrail_detections_by_detector Guardrail detections grouped by detector",
                 "# TYPE guardrail_detections_by_detector counter",
             ])
-            for detector, directions in self.detections.items():
-                total = directions["input"] + directions["output"]
-                lines.append(f'guardrail_detections_by_detector{{detector="{detector}"}} {total}')
+            for source, data in self._sources.items():
+                for detector, directions in data["detections"].items():
+                    total = directions["input"] + directions["output"]
+                    lines.append(f'guardrail_detections_by_detector{{detector="{detector}",source="{source}"}} {total}')
 
             lines.extend([
                 "",
                 "# HELP guardrail_detections_by_direction Guardrail detections grouped by direction",
                 "# TYPE guardrail_detections_by_direction counter",
             ])
-            input_total = sum(d["input"] for d in self.detections.values())
-            output_total = sum(d["output"] for d in self.detections.values())
-            lines.append(f'guardrail_detections_by_direction{{direction="input"}} {input_total}')
-            lines.append(f'guardrail_detections_by_direction{{direction="output"}} {output_total}')
+            for source, data in self._sources.items():
+                input_total = sum(d["input"] for d in data["detections"].values())
+                output_total = sum(d["output"] for d in data["detections"].values())
+                lines.append(f'guardrail_detections_by_direction{{direction="input",source="{source}"}} {input_total}')
+                lines.append(f'guardrail_detections_by_direction{{direction="output",source="{source}"}} {output_total}')
 
             return "\n".join(lines)
 
@@ -300,6 +317,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
+
 
 # =============================================================================
 # Request/Response Models
@@ -313,7 +337,7 @@ class ChatRequest(BaseModel):
 # Core Chat Logic with aiohttp SSE Streaming
 # =============================================================================
 
-async def process_chat(message: str) -> AsyncGenerator[dict, None]:
+async def process_chat(message: str, source: str = "audience") -> AsyncGenerator[dict, None]:
     """Process chat message and yield SSE events using aiohttp."""
 
     logger.debug("===== New chat request =====")
@@ -328,7 +352,7 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
         return
 
     # Increment request counter
-    await metrics.increment_request()
+    await metrics.increment_request(source)
 
     # LOCAL REGEX CHECK: Pre-filter before sending to orchestrator
     # This reduces load on the orchestrator by catching obvious violations locally
@@ -341,7 +365,7 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
                 logger.debug(f"Local regex BLOCKED - pattern #{i} matched: {repr(match.group())}")
                 logger.debug(f"Pattern: {ALL_REGEX_PATTERNS[i][:100]}...")
                 break
-        await metrics.increment_local_regex_block()
+        await metrics.increment_local_regex_block(source)
         yield {
             "type": "error",
             "message": DETECTOR_MESSAGES["regex_competitor_input"] + " Is there anything else I can help you with?",
@@ -404,10 +428,10 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
         # Process detections for metrics
         for det in detections.get("input", []):
             if isinstance(det, dict):
-                await metrics.add_detections([det], "input")
+                await metrics.add_detections([det], "input", source)
         for det in detections.get("output", []):
             if isinstance(det, dict):
-                await metrics.add_detections([det], "output")
+                await metrics.add_detections([det], "output", source)
 
         # Check for blocking conditions
         # Trust the orchestrator's decision - if it says UNSUITABLE, we block
@@ -568,11 +592,12 @@ async def process_chat(message: str) -> AsyncGenerator[dict, None]:
 # =============================================================================
 
 @app.post("/api/chat")
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, raw_request: Request):
     """SSE streaming chat endpoint with real-time streaming."""
+    source = raw_request.headers.get("x-source", "audience")
 
     async def generate():
-        async for event in process_chat(request.message):
+        async for event in process_chat(request.message, source=source):
             yield f"data: {json.dumps(event)}\n\n"
 
     return StreamingResponse(

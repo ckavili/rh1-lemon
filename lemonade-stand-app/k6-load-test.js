@@ -759,42 +759,42 @@ function getRandomPrompt() {
 
     const rand = Math.random();
 
-    // 40% safe prompts (to test LLM response)
-    if (rand < 0.40) {
+    // 5% safe prompts (small baseline)
+    if (rand < 0.05) {
         return {
             prompt: SAFE_PROMPTS[Math.floor(Math.random() * SAFE_PROMPTS.length)],
             type: 'safe',
         };
     }
-    // 15% output trigger prompts (pass input, may trigger output detection)
-    if (rand < 0.55) {
+    // 5% output trigger prompts (pass input, may trigger output detection)
+    if (rand < 0.10) {
         return {
             prompt: OUTPUT_TRIGGER_PROMPTS[Math.floor(Math.random() * OUTPUT_TRIGGER_PROMPTS.length)],
             type: 'output_trigger',
         };
     }
-    // 15% blocked fruits (regex test on input)
-    if (rand < 0.70) {
+    // 22% blocked fruits (regex/non-lemon)
+    if (rand < 0.32) {
         return {
             prompt: BLOCKED_PROMPTS[Math.floor(Math.random() * BLOCKED_PROMPTS.length)],
             type: 'blocked_fruit',
         };
     }
-    // 12% injection attempts (prompt injection detector)
-    if (rand < 0.82) {
+    // 23% injection attempts (jailbreak)
+    if (rand < 0.55) {
         return {
             prompt: INJECTION_PROMPTS[Math.floor(Math.random() * INJECTION_PROMPTS.length)],
             type: 'blocked_injection',
         };
     }
-    // 10% non-English (language detection)
-    if (rand < 0.92) {
+    // 23% non-English (language detection)
+    if (rand < 0.78) {
         return {
             prompt: NON_ENGLISH_PROMPTS[Math.floor(Math.random() * NON_ENGLISH_PROMPTS.length)],
             type: 'blocked_language',
         };
     }
-    // 8% HAP test (hate/abuse detection)
+    // 22% HAP test (swearing)
     return {
         prompt: HAP_PROMPTS[Math.floor(Math.random() * HAP_PROMPTS.length)],
         type: 'hap_test',
@@ -854,6 +854,7 @@ export default function() {
         headers: {
             'Content-Type': 'application/json',
             'Accept': 'text/event-stream',
+            'X-Source': 'redteam',
         },
         timeout: '120s',
         tags: { prompt_type: type },
